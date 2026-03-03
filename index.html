@@ -134,6 +134,8 @@ let gameState = 'title';
 let currentLevel = 0;
 let score = 0;
 let totalScore = 0;
+let highScore = 0;
+let lives = 3;
 let levelTimer = 0;
 let messageTimer = 0;
 let messageText = '';
@@ -175,14 +177,15 @@ function setupTouchControls() {
 // SAVE SYSTEM
 // ============================================================
 function saveProgress() {
-  localStorage.setItem('jellyfish-save', JSON.stringify({ highestLevel, totalScore }));
+  localStorage.setItem('jellyfish-save', JSON.stringify({ highestLevel, totalScore, highScore }));
 }
 function loadProgress() {
   try {
     const d = JSON.parse(localStorage.getItem('jellyfish-save') || '{}');
     highestLevel = d.highestLevel || 0;
     totalScore = d.totalScore || 0;
-  } catch(e) { highestLevel = 0; totalScore = 0; }
+    highScore = d.highScore || 0;
+  } catch(e) { highestLevel = 0; totalScore = 0; highScore = 0; }
 }
 loadProgress();
 
@@ -426,7 +429,7 @@ const jelly = {
       this.y = H - 25;
       this.vy = 0;
       if (this.takeDamage()) {
-        gameState = 'gameOver'; levelTimer = 0;
+        onDeath();
       }
     }
   },
@@ -527,6 +530,17 @@ function drawJellyfish(x, y, evo, facing, frame) {
 // ============================================================
 let currentLevelData = null;
 
+// Generate ceiling hazards to prevent riding the top
+function ceilingHazards(worldWidth, spacing) {
+  spacing = spacing || 350;
+  const obs = [];
+  const count = Math.floor((worldWidth - 400) / spacing);
+  for (let i = 0; i < count; i++) {
+    obs.push({ type:'enemyjelly', x: 250 + i * spacing + Math.random()*80, y: 30 + Math.random()*25, range: 20 });
+  }
+  return obs;
+}
+
 const levelDefs = [
   // TIER 1: Shallow Reef (0-5)
   { name:'Coral Maze', worldWidth:4000,
@@ -535,7 +549,7 @@ const levelDefs = [
       for (let i=0;i<16;i++) {
         obs.push({ type:'coral', x:300+i*220, y:100+Math.sin(i*1.2)*220, w:45+Math.random()*35, h:100+Math.random()*120 });
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Sea Grass Forest', worldWidth:4000,
@@ -548,7 +562,7 @@ const levelDefs = [
       for (let i=0;i<6;i++) {
         obs.push({ type:'coral', x:500+i*550, y:80+Math.random()*150, w:35, h:60+Math.random()*60 });
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Drifting Jellyfish', worldWidth:4500,
@@ -557,7 +571,7 @@ const levelDefs = [
       for (let i=0;i<16;i++) {
         obs.push({ type:'enemyjelly', x:350+i*240, y:100+Math.random()*400, vy:(Math.random()-0.5)*2, range:90 });
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Crab Sentries', worldWidth:4000,
@@ -571,7 +585,7 @@ const levelDefs = [
       for (let i=0;i<10;i++) {
         obs.push({ type:'coral', x:350+i*350, y:50+Math.random()*200, w:50, h:180+Math.random()*100 });
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Clam Snap', worldWidth:4500,
@@ -584,7 +598,7 @@ const levelDefs = [
       for (let i=0;i<5;i++) {
         obs.push({ type:'coral', x:500+i*700, y:80+Math.random()*100, w:40, h:120 });
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Bubble Curtain', worldWidth:4500,
@@ -597,7 +611,7 @@ const levelDefs = [
       for (let i=0;i<8;i++) {
         obs.push({ type:'coral', x:450+i*480, y:40+Math.random()*80, w:60, h:80 });
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   // TIER 2: Open Ocean (6-11)
@@ -608,7 +622,7 @@ const levelDefs = [
         obs.push({ type:'current', x:400+i*550, y:0, w:180, h:H, forceX:((i%2)*2-1)*3, forceY:0 });
       }
       for (let i=0;i<12;i++) obs.push({ type:'coral', x:450+i*380, y:80+Math.random()*400, w:40, h:80 });
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Puffer Fish', worldWidth:5000,
@@ -617,7 +631,7 @@ const levelDefs = [
       for (let i=0;i<16;i++) {
         obs.push({ type:'puffer', x:350+i*280, y:80+Math.random()*500, timer:Math.floor(Math.random()*40), period:70+i*5, inflated:false, baseR:20 });
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Barracuda Run', worldWidth:5000,
@@ -626,7 +640,7 @@ const levelDefs = [
       for (let i=0;i<12;i++) {
         obs.push({ type:'barracuda', x:400+i*370, y:60+Math.random()*500, speed:4+Math.random()*2.5, dir:((i%2)*2-1), respawnTimer:0 });
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Fishing Nets', worldWidth:5000,
@@ -640,7 +654,7 @@ const levelDefs = [
       for (let i=0;i<6;i++) {
         obs.push({ type:'enemyjelly', x:500+i*700, y:100+Math.random()*400, vy:0, range:70 });
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Whirlpool Dodge', worldWidth:5500,
@@ -651,7 +665,7 @@ const levelDefs = [
       }
       // Coral in between
       for (let i=0;i<6;i++) obs.push({ type:'coral', x:600+i*800, y:80+Math.random()*300, w:40, h:90 });
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Sea Turtle Highway', worldWidth:5500,
@@ -661,7 +675,7 @@ const levelDefs = [
         const lane = Math.floor(Math.random()*5);
         obs.push({ type:'turtle', x:400+i*310, y:80+lane*130, speed:1.5+Math.random()*2.5, dir:((i%2)*2-1), w:65, h:38 });
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   // TIER 3: Twilight Zone (12-17)
@@ -672,7 +686,7 @@ const levelDefs = [
         obs.push({ type:'squid', x:500+i*550, y:100+Math.random()*500, inkTimer:0, inkPeriod:180, inkClouds:[] });
       }
       for (let i=0;i<6;i++) obs.push({ type:'coral', x:600+i*700, y:100+Math.random()*400, w:35, h:80 });
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Anglerfish Lure', worldWidth:5000,
@@ -681,7 +695,7 @@ const levelDefs = [
       for (let i=0;i<8;i++) {
         obs.push({ type:'angler', x:500+i*550, y:100+Math.random()*500, lureX:0, lureY:0 });
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Pressure Waves', worldWidth:5500,
@@ -690,7 +704,7 @@ const levelDefs = [
       for (let i=0;i<8;i++) {
         obs.push({ type:'pressurewave', x:600+i*600, y:200+Math.random()*300, waveRadius:0, maxRadius:200, speed:2 });
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Moray Eel Tunnels', worldWidth:5500,
@@ -700,7 +714,7 @@ const levelDefs = [
         const side = i%2===0 ? 'top' : 'bottom';
         obs.push({ type:'moray', x:500+i*480, y:side==='top'?0:H, side, lungeTimer:0, lungePeriod:150, lunging:false, lungeY:0 });
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Jellyfish Swarm', worldWidth:5500,
@@ -717,7 +731,7 @@ const levelDefs = [
           }
         }
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Sinking Ship Debris', worldWidth:5500,
@@ -726,7 +740,7 @@ const levelDefs = [
       for (let i=0;i<18;i++) {
         obs.push({ type:'debris', x:400+i*280, y:-50-Math.random()*300, fallSpeed:1+Math.random()*2, w:30+Math.random()*40, h:15+Math.random()*20, respawnY:-50-Math.random()*200 });
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   // TIER 4: Deep Sea (18-23)
@@ -742,7 +756,7 @@ const levelDefs = [
       for (let i=0;i<10;i++) {
         obs.push({ type:'biolum', x:500+i*420, y:100+Math.random()*500, radius:90 });
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Giant Squid Tentacles', worldWidth:5500,
@@ -751,7 +765,7 @@ const levelDefs = [
       for (let i=0;i<8;i++) {
         obs.push({ type:'tentaclesweep', x:500+i*600, y:i%2===0?-20:H+20, angle:0, sweepSpeed:0.02+Math.random()*0.01, length:300 });
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Thermal Vents', worldWidth:5500,
@@ -760,7 +774,7 @@ const levelDefs = [
       for (let i=0;i<10;i++) {
         obs.push({ type:'vent', x:450+i*480, timer:0, period:120+Math.random()*60, active:false, activeTime:60 });
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Deep Sea Mines', worldWidth:5500,
@@ -769,7 +783,7 @@ const levelDefs = [
       for (let i=0;i<14;i++) {
         obs.push({ type:'mine', x:400+i*360, y:100+Math.random()*500, bobPhase:Math.random()*Math.PI*2, exploding:false, explodeTimer:0 });
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Lanternfish Frenzy', worldWidth:5500,
@@ -778,7 +792,7 @@ const levelDefs = [
       for (let i=0;i<12;i++) {
         obs.push({ type:'lanternfish', x:400+i*400, y:100+Math.random()*500, vx:(Math.random()-0.5)*3, vy:(Math.random()-0.5)*3, changeTimer:40+Math.random()*60, homeX:400+i*400 });
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Submarine Searchlights', worldWidth:5500,
@@ -788,7 +802,7 @@ const levelDefs = [
         obs.push({ type:'searchlight', x:600+i*900, y:H+30, angle:-Math.PI/2, sweepSpeed:0.015, sweepRange:Math.PI*0.4 });
       }
       for (let i=0;i<8;i++) obs.push({ type:'coral', x:500+i*600, y:100+Math.random()*400, w:30, h:60 });
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   // TIER 5: The Abyss (24-29)
@@ -801,7 +815,7 @@ const levelDefs = [
         const sy = side===0?0:side===1?0:side===2?-20:H+20;
         obs.push({ type:'tentaclesweep', x:500+i*500+sx, y:sy+(side<2?(100+Math.random()*500):0), angle:0, sweepSpeed:0.025+Math.random()*0.01, length:350 });
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Volcanic Eruption', worldWidth:6000,
@@ -816,7 +830,7 @@ const levelDefs = [
       for (let i=0;i<10;i++) {
         obs.push({ type:'debris', x:400+i*500, y:-50-Math.random()*300, fallSpeed:2+Math.random()*2, w:25+Math.random()*30, h:20+Math.random()*15, respawnY:-50-Math.random()*200 });
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Frozen Current', worldWidth:6000,
@@ -828,7 +842,7 @@ const levelDefs = [
       for (let i=0;i<5;i++) {
         obs.push({ type:'freezezone', x:500+i*1000, y:100, w:250, h:500, slowFactor:0.93 });
       }
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'Leviathan Chase', worldWidth:7000,
@@ -836,7 +850,7 @@ const levelDefs = [
       const obs = [];
       obs.push({ type:'leviathan', x:-200, speed:3.5, accel:0.002 });
       for (let i=0;i<10;i++) obs.push({ type:'coral', x:500+i*600, y:100+Math.random()*400, w:35, h:80 });
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'The Gauntlet', worldWidth:6000,
@@ -845,7 +859,7 @@ const levelDefs = [
       for (let i=0;i<4;i++) obs.push({ type:'whirlpool', x:600+i*1200, y:200+Math.random()*300, radius:90, strength:2.5 });
       for (let i=0;i<6;i++) obs.push({ type:'barracuda', x:800+i*800, y:100+Math.random()*450, speed:5, dir:((i%2)*2-1), respawnTimer:0 });
       for (let i=0;i<5;i++) obs.push({ type:'vent', x:500+i*1000, timer:0, period:80, active:false, activeTime:70 });
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
   { name:'The Trench Escape', worldWidth:6000,
@@ -861,7 +875,7 @@ const levelDefs = [
         obs.push({ type:'darkwall', x:400+i*320, y:H - wallH/2 + offsetY, w:50, h:wallH });
       }
       for (let i=0;i<8;i++) obs.push({ type:'mine', x:600+i*600, y:300+Math.random()*150, bobPhase:Math.random()*Math.PI*2, exploding:false, explodeTimer:0 });
-      return obs;
+      obs.push(...ceilingHazards(this.worldWidth)); return obs;
     }
   },
 ];
@@ -1001,7 +1015,7 @@ function updateObstacle(o) {
       o.speed += (o.accel || 0.002);
       o.x += o.speed;
       if (jelly.x - o.x < 150) {
-        if (jelly.takeDamage()) { gameState = 'gameOver'; levelTimer = 0; }
+        if (jelly.takeDamage()) { onDeath(); }
       }
       break;
     case 'current':
@@ -1333,8 +1347,14 @@ function drawObstacle(o) {
       ctx.restore();
       break;
     case 'darkwall':
-      ctx.fillStyle = '#0A0612';
+      ctx.fillStyle = '#1a1028';
       ctx.fillRect(o.x - o.w/2, o.y - o.h/2, o.w, o.h);
+      // Glowing edges so it's visible against dark backgrounds
+      ctx.strokeStyle = '#4a2080';
+      ctx.lineWidth = 2;
+      ctx.globalAlpha = 0.6;
+      ctx.strokeRect(o.x - o.w/2, o.y - o.h/2, o.w, o.h);
+      ctx.globalAlpha = 1;
       break;
     case 'biolum':
       ctx.shadowBlur = 20;
@@ -1731,6 +1751,17 @@ function drawHUD() {
   ctx.globalAlpha = 0.8;
   ctx.textAlign = 'left';
   ctx.fillText(`Score: ${score}`, 15, 25);
+  // Lives
+  ctx.fillStyle = '#FF5252';
+  for (let i=0;i<lives;i++) ctx.fillText('\u2764', 120+i*22, 25);
+  // High score
+  if (highScore > 0) {
+    ctx.fillStyle = '#FFD700';
+    ctx.globalAlpha = 0.5;
+    ctx.font = '12px monospace';
+    ctx.fillText(`HI: ${highScore}`, 200, 25);
+    ctx.globalAlpha = 0.8;
+  }
   ctx.textAlign = 'right';
   if (currentLevelData) ctx.fillText(currentLevelData.name, W-15, 25);
   ctx.fillText(`Level ${currentLevel+1}/30`, W-15, 45);
@@ -1932,13 +1963,32 @@ function drawGameOver() {
   ctx.textAlign = 'center';
   ctx.font = 'bold 36px monospace';
   ctx.fillStyle = '#FF5252';
-  ctx.fillText('Game Over', W/2, H/2-20);
+  ctx.fillText('Game Over', W/2, H/2-40);
   ctx.font = '18px monospace';
   ctx.fillStyle = '#fff';
-  ctx.fillText(`Level ${currentLevel+1}: ${levelDefs[currentLevel].name}`, W/2, H/2+20);
+  ctx.fillText(`Level ${currentLevel+1}: ${levelDefs[currentLevel].name}`, W/2, H/2);
+  // Lives display
+  ctx.font = '16px monospace';
+  if (lives > 0) {
+    ctx.fillStyle = '#FF5252';
+    let livesText = '';
+    for (let i=0;i<lives;i++) livesText += '\u2764 ';
+    ctx.fillText(`Lives: ${livesText}`, W/2, H/2+35);
+  } else {
+    ctx.fillStyle = '#FFD700';
+    ctx.fillText('Score reset! 3 lives restored.', W/2, H/2+35);
+  }
+  if (highScore > 0) {
+    ctx.font = '14px monospace';
+    ctx.fillStyle = '#FFD700';
+    ctx.globalAlpha = 0.7;
+    ctx.fillText(`High Score: ${highScore}`, W/2, H/2+60);
+    ctx.globalAlpha = 1;
+  }
   ctx.globalAlpha = 0.6;
   ctx.font = '14px monospace';
-  ctx.fillText('Press SPACE to retry  |  ESC for title', W/2, H/2+60);
+  ctx.fillStyle = '#fff';
+  ctx.fillText('Press SPACE to retry  |  ESC for title', W/2, H/2+90);
   ctx.globalAlpha = 1;
   ctx.textAlign = 'left';
 }
@@ -2007,7 +2057,7 @@ function gameLoop() {
     case 'title':
       drawTitle();
       if (spaceJust) {
-        score = 0;
+        score = 0; lives = 3;
         loadLevel(highestLevel);
         gameState = 'playing';
       }
@@ -2024,7 +2074,7 @@ function gameLoop() {
       if (keys['ArrowDown'] && !prevDown) levelSelectCursor = Math.min(29, levelSelectCursor+6);
       if (keys['ArrowUp'] && !prevUp) levelSelectCursor = Math.max(0, levelSelectCursor-6);
       if (spaceJust && levelSelectCursor <= highestLevel) {
-        score = 0;
+        score = 0; lives = 3;
         loadLevel(levelSelectCursor);
         gameState = 'playing';
       }
@@ -2071,8 +2121,7 @@ function gameLoop() {
         if (o.stunTimer > 0) return;
         if (checkCollision(o)) {
           if (jelly.takeDamage()) {
-            gameState = 'gameOver';
-            levelTimer = 0;
+            onDeath();
           }
         }
       });
@@ -2198,8 +2247,27 @@ function gameLoop() {
   requestAnimationFrame(gameLoop);
 }
 
+function onDeath() {
+  lives--;
+  gameState = 'gameOver';
+  levelTimer = 0;
+  if (lives <= 0) {
+    // Update high score before resetting
+    if (score > highScore) {
+      highScore = score;
+      saveProgress();
+    }
+    score = 0;
+    lives = 3;
+  }
+}
+
 function completeLevel() {
   totalScore += score;
+  if (score > highScore) {
+    highScore = score;
+    saveProgress();
+  }
   gameState = 'levelComplete';
   levelTimer = 0;
   evolveTimer = 0;
